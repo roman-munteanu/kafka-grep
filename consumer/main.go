@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"io/ioutil"
 	"strings"
 
+	"github.com/riferrei/srclient"
 	"gopkg.in/confluentinc/confluent-kafka-go.v1/kafka"
 	"gopkg.in/linkedin/goavro.v2"
 )
@@ -13,7 +15,7 @@ import (
 func main() {
 
 	bootstrapServers := flag.String("bootstrapServers", "", "Kafka server")
-	// TODO - schemaRegistryUrl
+	schemaRegistryURL := flag.String("schemaRegistryUrl", "", "Schema Registry URL")
 	groupID := flag.String("groupId", "", "Consumer group")
 	topic := flag.String("topic", "", "Topic")
 	shemaFile := flag.String("shemaFile", "", "Schema file")
@@ -23,6 +25,12 @@ func main() {
 	// validation
 	if len(*bootstrapServers) == 0 || len(*topic) == 0 || len(*topic) == 0 {
 		fmt.Println("Please provide required parameters: bootstrapServers, groupId, topic, schemaRegistryUrl or shemaFile")
+		return
+	}
+
+	if len(*schemaRegistryURL) == 0 && len(*shemaFile) == 0 {
+		fmt.Println("Either schemaRegistryUrl or shemaFile should be provided")
+		return
 	}
 
 	consumer, err := kafka.NewConsumer(&kafka.ConfigMap{
@@ -34,8 +42,14 @@ func main() {
 
 	consumer.SubscribeTopics([]string{*topic}, nil)
 
+	var schRegClient *srclient.SchemaRegistryClient
 	var codec *goavro.Codec
-	if len(*shemaFile) > 0 {
+
+	if len(*schemaRegistryURL) > 0 {
+
+		schRegClient = srclient.CreateSchemaRegistryClient(*schemaRegistryURL)
+
+	} else if len(*shemaFile) > 0 {
 		schemaBs, err := ioutil.ReadFile(*shemaFile)
 		logError(err)
 
@@ -54,6 +68,21 @@ func main() {
 				content := string(msg.Value)
 				if !strings.Contains(content, *grep) {
 					continue
+				}
+			}
+
+			if len(*schemaRegistryURL) > 0 {
+				schemaID := binary.BigEndian.Uint32(msg.Value[1:5])
+				fmt.Printf("schemaID: %d\n", schemaID)
+
+				schema, err := schRegClient.GetSchema(int(schemaID))
+				if err != nil {
+					panic(fmt.Sprintf("Cannot get the shema by id '%d' %s\n", schemaID, err))
+				}
+
+				codec, err = goavro.NewCodec(schema.Schema())
+				if err != nil {
+					fmt.Printf("CODEC from SCHEMA: %v\n", err)
 				}
 			}
 
