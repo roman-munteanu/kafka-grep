@@ -23,7 +23,14 @@ env GOOS=linux go build main.go
 
 # Usage
 
+via Schema Registry:
+```
+./main -bootstrapServers localhost:9092 -groupId my-group-id -topic my_topic -schemaRegistryUrl http://localhost:8081 -grep FilterByThisString
+```
+
 using a separate schema file:
 ```
-./main -bootstrapServers localhost:9092 -groupId my-group-id -topic my-topic -shemaFile /path/to/schema.json -grep FilterByThisString
+./main -bootstrapServers localhost:9092 -groupId my-group-id -topic my_topic -shemaFile /path/to/schema.json -grep FilterByThisString
 ```
+
+`grep` - optional parameter
